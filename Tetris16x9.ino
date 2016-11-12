@@ -10,7 +10,7 @@
 // Teensy Gnd to DType pin 8
 #define FASTLED_ESP8266_RAW_PIN_ORDER
 //#define FASTLED_ALLOW_INTERRUPTS 0
-#define FASTLED_INTERRUPT_RETRY_COUNT 3
+//#define FASTLED_INTERRUPT_RETRY_COUNT 300
 #include <FastLED.h>
 
 #include <LEDMatrix.h>
@@ -18,13 +18,14 @@
 #include <LEDText.h>
 #include <FontMatrise.h>
 #include "TetrisI.h"
+#include "ESP8266WiFi.h"
 
 // Change the next 6 defines to match your matrix type and size
 
-#define LED_PIN        5
+#define LED_PIN        13
 #define COLOR_ORDER    GRB
 #define CHIPSET        WS2812B
-#define BRIGHTNESS 128
+#define BRIGHTNESS 160
 
 #define MATRIX_WIDTH   9
 #define MATRIX_HEIGHT  16
@@ -40,7 +41,7 @@ cLEDMatrix < -MATRIX_WIDTH, MATRIX_HEIGHT, MATRIX_TYPE > leds;
 // Joystick pins used with pullup so active when grounded
 #define ROTATE_PIN  4
 #define LEFT_PIN    12
-#define RIGHT_PIN   13
+#define RIGHT_PIN   5
 #define DOWN_PIN    14
 
 #define TETRIS_SPR_WIDTH  4
@@ -68,6 +69,9 @@ unsigned int HighScore = 0, LastScore;
 uint16_t PlasmaTime, PlasmaShift;
 uint32_t LoopDelayMS, LastLoop;
 
+uint8_t digitalReadWrapper(byte m_pin){
+  return digitalRead(m_pin);
+}
 
 // Joystick class to handle input debounce along with variable delays and repeat option
 class cJoyStick
@@ -80,11 +84,11 @@ class cJoyStick
       m_DelayMS = Delayms;
       m_Repeat = Repeat;
       m_LastMS = millis();
-      m_state = digitalRead(m_pin);
+      m_state = digitalReadWrapper(m_pin);
     }
     boolean Read()
     {
-      uint8_t state = digitalRead(m_pin);
+      uint8_t state = digitalReadWrapper(m_pin);
       uint32_t ms = millis();
       if ((state != m_state) && ((ms - m_LastMS) >= m_DebounceMS))
       {
@@ -114,7 +118,6 @@ class cJoyStick
     boolean m_Repeat;
 };
 
-
 cJoyStick JSRotate(ROTATE_PIN, 10, 250, false);
 cJoyStick JSLeft(LEFT_PIN, 10, 250, false);
 cJoyStick JSRight(RIGHT_PIN, 10, 250, false);
@@ -123,6 +126,10 @@ cJoyStick JSDown(DOWN_PIN, 10, 50, false);
 
 void setup()
 {
+  // Turn off Wifi
+  WiFi.mode(WIFI_OFF);
+  WiFi.forceSleepBegin();
+  
   pinMode(ROTATE_PIN, INPUT_PULLUP);
   pinMode(LEFT_PIN, INPUT_PULLUP);
   pinMode(RIGHT_PIN, INPUT_PULLUP);
@@ -138,7 +145,7 @@ void setup()
   delay(1000);
   FastLED.showColor(CRGB::Blue);
   delay(1000);
-  FastLED.showColor(CRGB::White);
+  FastLED.showColor(CRGB::Purple);
   delay(1000);
   FastLED.show();
 
@@ -154,7 +161,7 @@ void setup()
 
   TetrisMsg.SetFont(MatriseFontData);
   //sprintf((char *)BlankMsg, "%.*s", min(((leds.Height() + TetrisMsg.FontHeight()) / (TetrisMsg.FontHeight() + 1)), (int)sizeof(BlankMsg) - 1), "                              ");
-  sprintf((char *)BlankMsg, "%*s", min(((leds.Height() + TetrisMsg.FontHeight()) / (TetrisMsg.FontHeight() + 1)), (int)sizeof(BlankMsg) - 1), "");
+  sprintf((char *)BlankMsg, "%*s", _min(((leds.Height() + TetrisMsg.FontHeight()) / (TetrisMsg.FontHeight() + 1)), (int)sizeof(BlankMsg) - 1), "");
   sprintf((char *)AttractMsg, "%sTETRIS%sSCORE %u%sHIGH %u%sANY BUTTON TO START%s", BlankMsg, BlankMsg, LastScore, BlankMsg, (int)HighScore, BlankMsg, BlankMsg);
   TetrisMsg.Init(&leds, TetrisMsg.FontWidth() + 1, leds.Height(), (leds.Width() - TetrisMsg.FontWidth()) / 2, 0);
   TetrisMsg.SetBackgroundMode(BACKGND_LEAVE);
@@ -237,7 +244,7 @@ void loop()
         {
           for (k = 0; k < MATRIX_WIDTH; k += 8)
           {
-            if ((uint8_t)(0xff00 >> min(MATRIX_WIDTH - k, 8)) != Mask[j + (k / 8)])
+            if ((uint8_t)(0xff00 >> _min(MATRIX_WIDTH - k, 8)) != Mask[j + (k / 8)])
               break;
           }
           if (k >= MATRIX_WIDTH)
@@ -262,7 +269,7 @@ void loop()
           if ((CurrentBlock.GetCurrentFrame() % 2) == 1)
           {
             if (CurrentBlock.GetXChange() == 0)
-              CurrentBlock.m_X = min(CurrentBlock.m_X, MATRIX_WIDTH - TETRIS_SPR_WIDTH);
+              CurrentBlock.m_X = _min(CurrentBlock.m_X, MATRIX_WIDTH - TETRIS_SPR_WIDTH);
             else if ((CurrentBlock.GetXChange() != 3) && (CurrentBlock.GetFlags() & SPRITE_EDGE_X_MAX))
               --CurrentBlock.m_X;
           }
@@ -354,7 +361,7 @@ void loop()
           {
             for (j = 0; j < MATRIX_WIDTH; j += 8)
             {
-              if ((uint8_t)(0xff00 >> min(MATRIX_WIDTH - j, 8)) != Mask[i + (j / 8)])
+              if ((uint8_t)(0xff00 >> _min(MATRIX_WIDTH - j, 8)) != Mask[i + (j / 8)])
                 break;
             }
             if (j >= MATRIX_WIDTH)
@@ -380,7 +387,7 @@ void loop()
           else if (numlines == 4)
             LastScore += 40;
           TotalLines += numlines;
-          DropDelay = max(1, INITIAL_DROP_FRAMES - (TotalLines / 5));
+          DropDelay = _max(1, INITIAL_DROP_FRAMES - (TotalLines / 5));
         }
         // Start new block
         uint8_t j = random8(sizeof(TetrisSprData) / sizeof(TetrisSprData[0]));
