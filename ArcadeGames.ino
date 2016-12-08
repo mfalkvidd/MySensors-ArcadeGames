@@ -1,3 +1,28 @@
+// Enable debug prints to serial monitor
+#define MY_DEBUG
+#define ATTRACT sprintf((char *)AttractMsg, "%sTETRIS%sSCORE %u%sHIGH %u%sANY BUTTON TO START%s", BlankMsg, BlankMsg, LastScore, BlankMsg, HighScore, BlankMsg, BlankMsg);
+// Enable and select radio type attached
+#define MY_RF24_CHANNEL 42
+#define MY_RADIO_NRF24
+
+// Set LOW transmit power level as default, if you have an amplified NRF-module and
+// power your radio separately with a good regulator you can turn up PA level.
+#define MY_RF24_PA_LEVEL RF24_PA_LOW
+
+// Enable serial gateway
+#define MY_GATEWAY_SERIAL
+
+// Define a lower baud rate for Arduino's running on 8 MHz (Arduino Pro Mini 3.3V & SenseBender)
+#if F_CPU == 8000000L
+#define MY_BAUD_RATE 38400
+#endif
+#include <MySensors.h>
+#include "MYSLog.h"
+
+#define NUM_BUTTONS 6
+bool button_state[NUM_BUTTONS];
+
+// Based on https://github.com/AaronLiddiment/LEDSprites/blob/master/examples/Tetris/Tetris.ino
 // TETRIS
 // A simple Tetris game to show the use of my cLEDMatrix, cLEDText & cLEDSprite classes using the FastlED library.
 // It uses 47.5k rom and 6k ram.
@@ -20,13 +45,12 @@
 #include "TetrisI.h"
 #include "ESP8266WiFi.h"
 
+#define BRIGHTNESS 160
 // Change the next 6 defines to match your matrix type and size
 
-#define LED_PIN        13
+#define LED_PIN        5
 #define COLOR_ORDER    GRB
 #define CHIPSET        WS2812B
-#define BRIGHTNESS 160
-
 #define MATRIX_WIDTH   9
 #define MATRIX_HEIGHT  16
 #define MATRIX_TYPE    VERTICAL_ZIGZAG_MATRIX
@@ -39,16 +63,17 @@ cLEDMatrix < -MATRIX_WIDTH, MATRIX_HEIGHT, MATRIX_TYPE > leds;
 #define INITIAL_DROP_FRAMES  20  // Start of game block drop delay in frames
 
 // Joystick pins used with pullup so active when grounded
-#define ROTATE_PIN  4
-#define LEFT_PIN    12
-#define RIGHT_PIN   5
-#define DOWN_PIN    14
+#define ROTATE_PIN  2
+#define LEFT_PIN    3
+#define RIGHT_PIN   4
+#define DOWN_PIN    5
 
 #define TETRIS_SPR_WIDTH  4
 #define TETRIS_SPR_HEIGHT 4
 const uint8_t *TetrisSprData[] = { TetrisIData, TetrisJData, TetrisLData, TetrisOData, TetrisSData, TetrisTData, TetrisZData };
 const uint8_t *TetrisSprMask[] = { TetrisIMask, TetrisJMask, TetrisLMask, TetrisOMask, TetrisSMask, TetrisTMask, TetrisZMask};
 const struct CRGB TetrisColours[] = { CRGB(0, 255, 255), CRGB(0, 0, 255), CRGB(255, 165, 0), CRGB(255, 255, 0), CRGB(50, 205, 50), CRGB(255, 0, 255), CRGB(255, 0, 0) };
+uint8_t next_block = random8(sizeof(TetrisSprData) / sizeof(TetrisSprData[0]));
 
 uint8_t PlayfieldData[MATRIX_HEIGHT * ((MATRIX_WIDTH + 7) / 8) * _3BIT];
 uint8_t PlayfieldMask[MATRIX_HEIGHT * ((MATRIX_WIDTH + 7) / 8) * _1BIT];
@@ -64,14 +89,27 @@ cLEDText TetrisMsg;
 uint8_t DropDelay;
 boolean AttractMode, NextBlock;
 int16_t TotalLines;
-unsigned int HighScore = 0, LastScore;
 
 uint16_t PlasmaTime, PlasmaShift;
 uint32_t LoopDelayMS, LastLoop;
 
-uint8_t digitalReadWrapper(byte m_pin){
-  return digitalRead(m_pin);
+uint8_t digitalReadWrapper(byte m_pin) {
+  //return digitalRead(m_pin);
+  return !button_state[m_pin];
 }
+
+void SaveHighScore(unsigned int HighScore) {
+  saveState(0, HighScore & 0xFF);
+  saveState(1, ((HighScore >> 8) & 0xFF));
+}
+
+unsigned int LoadHighScore() {
+  unsigned int HighScore = loadState(0) + (loadState(1) << 8);
+  // EEPROM is normally initialized to 0xFF
+  return HighScore == 0xFFFF ? 0 : HighScore;
+}
+
+unsigned int HighScore = LoadHighScore(), LastScore;
 
 // Joystick class to handle input debounce along with variable delays and repeat option
 class cJoyStick
@@ -129,14 +167,17 @@ void setup()
   // Turn off Wifi
   WiFi.mode(WIFI_OFF);
   WiFi.forceSleepBegin();
-  
-  pinMode(ROTATE_PIN, INPUT_PULLUP);
-  pinMode(LEFT_PIN, INPUT_PULLUP);
-  pinMode(RIGHT_PIN, INPUT_PULLUP);
-  pinMode(DOWN_PIN, INPUT_PULLUP);
+
+  /* Only used for locally attached gamepad
+    pinMode(ROTATE_PIN, INPUT_PULLUP);
+    pinMode(LEFT_PIN, INPUT_PULLUP);
+    pinMode(RIGHT_PIN, INPUT_PULLUP);
+    pinMode(DOWN_PIN, INPUT_PULLUP);
+  */
 
   FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds[0], leds.Size());
   FastLED.setBrightness(BRIGHTNESS);
+  FastLED.setCorrection(TypicalSMD5050);
   FastLED.clear(true);
   delay(500);
   FastLED.showColor(CRGB::Red);
@@ -162,7 +203,7 @@ void setup()
   TetrisMsg.SetFont(MatriseFontData);
   //sprintf((char *)BlankMsg, "%.*s", min(((leds.Height() + TetrisMsg.FontHeight()) / (TetrisMsg.FontHeight() + 1)), (int)sizeof(BlankMsg) - 1), "                              ");
   sprintf((char *)BlankMsg, "%*s", _min(((leds.Height() + TetrisMsg.FontHeight()) / (TetrisMsg.FontHeight() + 1)), (int)sizeof(BlankMsg) - 1), "");
-  sprintf((char *)AttractMsg, "%sTETRIS%sSCORE %u%sHIGH %u%sANY BUTTON TO START%s", BlankMsg, BlankMsg, LastScore, BlankMsg, (int)HighScore, BlankMsg, BlankMsg);
+  ATTRACT;
   TetrisMsg.Init(&leds, TetrisMsg.FontWidth() + 1, leds.Height(), (leds.Width() - TetrisMsg.FontWidth()) / 2, 0);
   TetrisMsg.SetBackgroundMode(BACKGND_LEAVE);
   TetrisMsg.SetScrollDirection(SCROLL_UP);
@@ -331,13 +372,14 @@ void loop()
                 if (LastScore > HighScore)
                 {
                   HighScore = LastScore;
+                  SaveHighScore(HighScore);
                   sprintf((char *)GameOverMsg, "%sGAME OVER%sNEW HIGH SCORE %u%s", BlankMsg, BlankMsg, LastScore, BlankMsg);
                 }
                 else
                 {
                   sprintf((char *)GameOverMsg, "%sGAME OVER%sSCORE %u%s", BlankMsg, BlankMsg, LastScore, BlankMsg);
                 }
-                sprintf((char *)AttractMsg, "%sTETRIS%sSCORE %u%sHIGH %u%sANY BUTTON TO START%s", BlankMsg, BlankMsg, LastScore, BlankMsg, HighScore, BlankMsg, BlankMsg);
+                ATTRACT;
                 TetrisMsg.SetText(GameOverMsg, strlen((char *)GameOverMsg));
                 TetrisMsg.SetBackgroundMode(BACKGND_DIMMING, 0x40);
               }
@@ -390,7 +432,9 @@ void loop()
           DropDelay = _max(1, INITIAL_DROP_FRAMES - (TotalLines / 5));
         }
         // Start new block
-        uint8_t j = random8(sizeof(TetrisSprData) / sizeof(TetrisSprData[0]));
+        uint8_t j = next_block;
+        next_block = random8(sizeof(TetrisSprData) / sizeof(TetrisSprData[0]));
+
         CurrentBlock.Setup(TETRIS_SPR_WIDTH, TETRIS_SPR_WIDTH, TetrisSprData[j], 4, _3BIT, TetrisColours, TetrisSprMask[j]);
         CurrentBlock.SetPositionFrameMotionOptions((MATRIX_WIDTH / 2) - 1, MATRIX_HEIGHT, 0, 0, 0, 0, -1, DropDelay, SPRITE_DETECT_COLLISION | SPRITE_DETECT_EDGE);
         CurrentBlock.SetXChange(j);
@@ -401,6 +445,9 @@ void loop()
     }
   }
   Sprites.RenderSprites();
+  // Show a preview of the next block (doesn't work, need to use a sprite probably)
+  // (leds)(0, MATRIX_HEIGHT) = TetrisColours[next_block];
+
   if (AttractMode)
   {
     if (TetrisMsg.UpdateText() == -1)
@@ -413,5 +460,10 @@ void loop()
     }
   }
   FastLED.show();
+}
+
+void receive(const MyMessage &message) {
+  LOG(F("Received type %d data %s from %d:%d\n"), message.type, message.getBool() ? "TRUE" : "FALSE", message.sender, message.sensor);
+  button_state[message.sensor] = message.getBool();
 }
 
