@@ -17,7 +17,6 @@
 #define MY_BAUD_RATE 38400
 #endif
 #include <MySensors.h>
-#include "MYSLog.h"
 
 #define NUM_BUTTONS 6
 bool button_state[NUM_BUTTONS];
@@ -72,14 +71,14 @@ cLEDMatrix < -MATRIX_WIDTH, MATRIX_HEIGHT, MATRIX_TYPE > leds;
 #define TETRIS_SPR_HEIGHT 4
 const uint8_t *TetrisSprData[] = { TetrisIData, TetrisJData, TetrisLData, TetrisOData, TetrisSData, TetrisTData, TetrisZData };
 const uint8_t *TetrisSprMask[] = { TetrisIMask, TetrisJMask, TetrisLMask, TetrisOMask, TetrisSMask, TetrisTMask, TetrisZMask};
-const struct CRGB TetrisColours[] = { CRGB(0, 255, 255), CRGB(0, 0, 255), CRGB(255, 165, 0), CRGB(255, 255, 0), CRGB(50, 205, 50), CRGB(255, 0, 255), CRGB(255, 0, 0) };
+const struct CRGB TetrisColours[] = { CRGB(0, 255, 255), CRGB(0, 0, 255), CRGB(255, 125, 0), CRGB(255, 255, 0), CRGB(50, 205, 50), CRGB(255, 0, 255), CRGB(255, 0, 0) };
 uint8_t next_block = random8(sizeof(TetrisSprData) / sizeof(TetrisSprData[0]));
 
 uint8_t PlayfieldData[MATRIX_HEIGHT * ((MATRIX_WIDTH + 7) / 8) * _3BIT];
 uint8_t PlayfieldMask[MATRIX_HEIGHT * ((MATRIX_WIDTH + 7) / 8) * _1BIT];
 uint8_t CompletedLinesData[TETRIS_SPR_HEIGHT * ((MATRIX_WIDTH + 7) / 8) * _1BIT];
 const struct CRGB CompletedLinesColour[] = { CRGB(255, 255, 255) };
-cSprite Playfield, CompletedLines, CurrentBlock;
+cSprite Playfield, CompletedLines, CurrentBlock, NextBlockHint;
 cLEDSprites Sprites(&leds);
 
 unsigned char AttractMsg[144], GameOverMsg[88];
@@ -179,15 +178,15 @@ void setup()
   FastLED.setBrightness(BRIGHTNESS);
   FastLED.setCorrection(TypicalSMD5050);
   FastLED.clear(true);
-  delay(500);
+  delay(50);
   FastLED.showColor(CRGB::Red);
-  delay(1000);
+  delay(500);
   FastLED.showColor(CRGB::Lime);
-  delay(1000);
+  delay(500);
   FastLED.showColor(CRGB::Blue);
-  delay(1000);
+  delay(500);
   FastLED.showColor(CRGB::Purple);
-  delay(1000);
+  delay(500);
   FastLED.show();
 
   memset(PlayfieldData, 0, sizeof(PlayfieldData));
@@ -439,14 +438,17 @@ void loop()
         CurrentBlock.SetPositionFrameMotionOptions((MATRIX_WIDTH / 2) - 1, MATRIX_HEIGHT, 0, 0, 0, 0, -1, DropDelay, SPRITE_DETECT_COLLISION | SPRITE_DETECT_EDGE);
         CurrentBlock.SetXChange(j);
         Sprites.AddSprite(&CurrentBlock);
+
+        Sprites.RemoveSprite(&NextBlockHint);
+        NextBlockHint.Setup(TETRIS_SPR_WIDTH, TETRIS_SPR_WIDTH, TetrisSprData[next_block], 4, _3BIT, TetrisColours, TetrisSprMask[next_block]);
+        NextBlockHint.SetPositionFrameMotionOptions(MATRIX_WIDTH - 1, MATRIX_HEIGHT - 3, 0, 0, 0, 0, 0, 0, 0);
+        Sprites.AddSprite(&NextBlockHint);
         NextBlock = false;
       }
       Sprites.UpdateSprites();
     }
   }
   Sprites.RenderSprites();
-  // Show a preview of the next block (doesn't work, need to use a sprite probably)
-  // (leds)(0, MATRIX_HEIGHT) = TetrisColours[next_block];
 
   if (AttractMode)
   {
@@ -455,6 +457,7 @@ void loop()
       TetrisMsg.SetText(AttractMsg, strlen((char *)AttractMsg));
       TetrisMsg.SetBackgroundMode(BACKGND_LEAVE);
       Sprites.RemoveSprite(&CurrentBlock);
+      Sprites.RemoveSprite(&NextBlockHint);
       memset(PlayfieldData, 0, sizeof(PlayfieldData));
       memset(PlayfieldMask, 0, sizeof(PlayfieldMask));
     }
@@ -463,7 +466,6 @@ void loop()
 }
 
 void receive(const MyMessage &message) {
-  LOG(F("Received type %d data %s from %d:%d\n"), message.type, message.getBool() ? "TRUE" : "FALSE", message.sender, message.sensor);
   button_state[message.sensor] = message.getBool();
 }
 
