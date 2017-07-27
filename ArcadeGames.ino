@@ -1,5 +1,3 @@
-// Enable debug prints to serial monitor
-#define MY_DEBUG
 #define ATTRACT sprintf((char *)AttractMsg, "%sTETRIS%sSCORE %u%sHIGH %u%sANY BUTTON TO START%s", BlankMsg, BlankMsg, LastScore, BlankMsg, HighScore, BlankMsg, BlankMsg);
 // Enable and select radio type attached
 #define MY_RF24_CHANNEL 42
@@ -45,6 +43,7 @@ bool button_state[NUM_BUTTONS];
 #include "ESP8266WiFi.h"
 
 #define BRIGHTNESS 160
+#define MAX_FPS 8 // For Snake
 // Change the next 6 defines to match your matrix type and size
 
 #define LED_PIN        5
@@ -53,16 +52,19 @@ bool button_state[NUM_BUTTONS];
 #define MATRIX_WIDTH   9
 #define MATRIX_HEIGHT  16
 #define MATRIX_TYPE    VERTICAL_ZIGZAG_MATRIX
+#define NUM_LEDS (MATRIX_WIDTH * MATRIX_HEIGHT)
 
 // NOTE the '-' sign before the width, this is due to my leds matrix origin being on the right hand side
 cLEDMatrix < -MATRIX_WIDTH, MATRIX_HEIGHT, MATRIX_TYPE > leds;
-
 
 #define TARGET_FRAME_TIME    25  // Desired delay between updates (in milliseconds), though if too many leds it will just run as fast as it can!
 #define INITIAL_DROP_FRAMES  20  // Start of game block drop delay in frames
 
 // Joystick pins used with pullup so active when grounded
-#define ROTATE_PIN  2
+#define A_PIN       0
+#define B_PIN       1
+#define UP_PIN      2
+#define ROTATE_PIN  UP_PIN
 #define LEFT_PIN    3
 #define RIGHT_PIN   4
 #define DOWN_PIN    5
@@ -103,12 +105,33 @@ void SaveHighScore(unsigned int HighScore) {
 }
 
 unsigned int LoadHighScore() {
+  // For Tetris
   unsigned int HighScore = loadState(0) + (loadState(1) << 8);
   // EEPROM is normally initialized to 0xFF
   return HighScore == 0xFFFF ? 0 : HighScore;
 }
 
 unsigned int HighScore = LoadHighScore(), LastScore;
+
+enum class Gamemode
+{
+  TETRIS,
+  SNAKE
+};
+
+Gamemode mode = Gamemode::TETRIS;
+
+void nextMode() {
+  switch (mode) {
+    case Gamemode::TETRIS:
+      mode = Gamemode::SNAKE;
+      break;
+    case Gamemode::SNAKE:
+      mode = Gamemode::TETRIS;
+      break;
+  }
+  FastLED.clear();
+}
 
 // Joystick class to handle input debounce along with variable delays and repeat option
 class cJoyStick
@@ -160,6 +183,8 @@ cJoyStick JSLeft(LEFT_PIN, 10, 250, false);
 cJoyStick JSRight(RIGHT_PIN, 10, 250, false);
 cJoyStick JSDown(DOWN_PIN, 10, 50, false);
 
+#include "snake.h"
+snake the_snake(3, vector2d(4, 4), vector2d(MATRIX_WIDTH, MATRIX_HEIGHT));
 
 void setup()
 {
@@ -174,7 +199,7 @@ void setup()
     pinMode(DOWN_PIN, INPUT_PULLUP);
   */
 
-  FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds[0], leds.Size());
+  FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds[0], leds.Size()); // This is used by Tetris
   FastLED.setBrightness(BRIGHTNESS);
   FastLED.setCorrection(TypicalSMD5050);
   FastLED.clear(true);
@@ -189,6 +214,10 @@ void setup()
   delay(500);
   FastLED.show();
 
+  setupTetris();
+}
+
+void setupTetris() {
   memset(PlayfieldData, 0, sizeof(PlayfieldData));
   memset(PlayfieldMask, 0, sizeof(PlayfieldMask));
   Playfield.Setup(leds.Width(), leds.Height(), PlayfieldData, 1, _3BIT, TetrisColours, PlayfieldMask);
@@ -200,7 +229,6 @@ void setup()
   CompletedLines.SetPositionFrameMotionOptions(0, 0, 0, 0, 0, 0, 0, 0, 0);
 
   TetrisMsg.SetFont(MatriseFontData);
-  //sprintf((char *)BlankMsg, "%.*s", min(((leds.Height() + TetrisMsg.FontHeight()) / (TetrisMsg.FontHeight() + 1)), (int)sizeof(BlankMsg) - 1), "                              ");
   sprintf((char *)BlankMsg, "%*s", _min(((leds.Height() + TetrisMsg.FontHeight()) / (TetrisMsg.FontHeight() + 1)), (int)sizeof(BlankMsg) - 1), "");
   ATTRACT;
   TetrisMsg.Init(&leds, TetrisMsg.FontWidth() + 1, leds.Height(), (leds.Width() - TetrisMsg.FontWidth()) / 2, 0);
@@ -217,7 +245,18 @@ void setup()
   PlasmaTime = 0;
 }
 
-void loop()
+void loop() {
+  switch (mode) {
+    case Gamemode::TETRIS :
+      loopTetris();
+      break;
+    case Gamemode::SNAKE :
+      loopSnake();
+      break;
+  }
+}
+
+void loopTetris()
 {
   if (abs(millis() - LastLoop) < LoopDelayMS)
   { // If it is not yet time to update, just let FastLED dither and return
@@ -467,5 +506,44 @@ void loop()
 
 void receive(const MyMessage &message) {
   button_state[message.sensor] = message.getBool();
+  if (button_state[A_PIN] && button_state[B_PIN]) {
+    // A+B buttons are pressed at the same time. Switch mode.
+    nextMode();
+  }
+}
+
+void loopSnake() {
+  uint32_t start_frame = millis();
+
+  if (button_state[LEFT_PIN]) {
+    the_snake.changeDirection(Left);
+  }
+  if (button_state[UP_PIN]) {
+    the_snake.changeDirection(Up);
+  }
+  if (button_state[DOWN_PIN]) {
+    the_snake.changeDirection(Down);
+  }
+  if (button_state[RIGHT_PIN]) {
+    the_snake.changeDirection(Right);
+  }
+
+  FastLED.clear();
+
+  leds(the_snake.getFood().x, the_snake.getFood().y) = CRGB(255, 0, 0); //= CHSV((uint8_t)((h / 256) + 128), 255, 64);
+
+  snake_part *s = the_snake.getHead();
+  leds(s->pos.x, s->pos.y) = CRGB(255, 255, 0);
+  s = s->next;
+
+  while (s != nullptr) {
+    leds(s->pos.x, s->pos.y) = CRGB(0, 255, 0);
+    s = s->next;
+  }
+
+  the_snake.update();
+
+  FastLED.show();
+  wait((1000 / MAX_FPS) - (millis() - start_frame));
 }
 
