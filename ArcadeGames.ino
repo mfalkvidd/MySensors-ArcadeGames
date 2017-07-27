@@ -10,10 +10,6 @@
 // Enable serial gateway
 #define MY_GATEWAY_SERIAL
 
-// Define a lower baud rate for Arduino's running on 8 MHz (Arduino Pro Mini 3.3V & SenseBender)
-#if F_CPU == 8000000L
-#define MY_BAUD_RATE 38400
-#endif
 #include <MySensors.h>
 
 #define NUM_BUTTONS 6
