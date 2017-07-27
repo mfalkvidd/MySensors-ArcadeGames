@@ -19,16 +19,8 @@ bool button_state[NUM_BUTTONS];
 // TETRIS
 // A simple Tetris game to show the use of my cLEDMatrix, cLEDText & cLEDSprite classes using the FastlED library.
 // It uses 47.5k rom and 6k ram.
-// The joystick/buttons should just ground out the appropriate pins to control the game
-// I have my Teensy 3.1 hooked up to a standard 9 way D socket so that I can use a standard Atari style joytick
-// Teensy pin 6 to DType pin 2
-// Teensy pin 4 to DType pin 3
-// Teensy pin 5 to DType pin 4
-// Teensy pin 3 to DType pin 6
-// Teensy Gnd to DType pin 8
+
 #define FASTLED_ESP8266_RAW_PIN_ORDER
-//#define FASTLED_ALLOW_INTERRUPTS 0
-//#define FASTLED_INTERRUPT_RETRY_COUNT 300
 #include <FastLED.h>
 
 #include <LEDMatrix.h>
@@ -56,7 +48,6 @@ cLEDMatrix < -MATRIX_WIDTH, MATRIX_HEIGHT, MATRIX_TYPE > leds;
 #define TARGET_FRAME_TIME    25  // Desired delay between updates (in milliseconds), though if too many leds it will just run as fast as it can!
 #define INITIAL_DROP_FRAMES  20  // Start of game block drop delay in frames
 
-// Joystick pins used with pullup so active when grounded
 #define A_PIN       0
 #define B_PIN       1
 #define UP_PIN      2
@@ -187,13 +178,6 @@ void setup()
   // Turn off Wifi
   WiFi.mode(WIFI_OFF);
   WiFi.forceSleepBegin();
-
-  /* Only used for locally attached gamepad
-    pinMode(ROTATE_PIN, INPUT_PULLUP);
-    pinMode(LEFT_PIN, INPUT_PULLUP);
-    pinMode(RIGHT_PIN, INPUT_PULLUP);
-    pinMode(DOWN_PIN, INPUT_PULLUP);
-  */
 
   FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds[0], leds.Size()); // This is used by Tetris
   FastLED.setBrightness(BRIGHTNESS);
