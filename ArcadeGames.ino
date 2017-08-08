@@ -112,6 +112,7 @@ enum class Gamemode
   SNAKE,
   MOODLIGHT,
   FIRE,
+  LIGHT,
 };
 
 Gamemode mode = Gamemode::TETRIS;
@@ -128,6 +129,9 @@ void nextMode() {
       mode = Gamemode::FIRE;
       break;
     case Gamemode::FIRE:
+      mode = Gamemode::LIGHT;
+      break;
+    case Gamemode::LIGHT:
       mode = Gamemode::TETRIS;
       break;
   }
@@ -257,6 +261,9 @@ void loop() {
     case Gamemode::FIRE :
       loopFire();
       break;
+    case Gamemode::LIGHT :
+      looplight();
+      break;
   }
 }
 
@@ -295,6 +302,68 @@ void loopMoodlight() {
   hsv2rgb_rainbow(CHSV(currentHue, 255, 255), moodColorRGB);
   moodColorRGB.subtractFromRGB(dimLevel);
   FastLED.showColor(moodColorRGB);
+}
+
+void looplight() {
+  static unsigned long currentWhite = Candle;
+  static int dimLevel = 0;
+  CRGB lightColorRGB;
+  static unsigned long lastUpdate = millis();
+  if ((millis() - lastUpdate > MIN_UPDATE_DELAY)) {
+    // Don't check buttons too frequently
+    if (button_state[LEFT_PIN]) {
+      // make light warmer
+      switch (currentWhite) {
+        case ClearBlueSky:
+          currentWhite = Candle; // 1900 K
+          break;
+        case Candle:
+          currentWhite = Tungsten100W; // 2850 K
+          break;
+        case Tungsten100W:
+          currentWhite = Halogen; // 3200 K
+          break;
+        case Halogen:
+          currentWhite = DirectSunlight; // 6000 K
+          break;
+        case DirectSunlight:
+          currentWhite = ClearBlueSky; // 20000 K
+          break;
+      }
+    }
+    if (button_state[UP_PIN]) {
+      // Decrease dimming
+      dimLevel = constrain(dimLevel - DIM_ADJUSTMENT_FACTOR, 0, 255);
+    }
+    if (button_state[DOWN_PIN]) {
+      // Increase dimming
+      dimLevel = constrain(dimLevel + DIM_ADJUSTMENT_FACTOR, 0, 255);
+    }
+    if (button_state[RIGHT_PIN]) {
+      // make light cooler
+      switch (currentWhite) {
+        case ClearBlueSky:
+          currentWhite = DirectSunlight;
+          break;
+        case DirectSunlight:
+          currentWhite = Halogen;
+          break;
+        case Halogen:
+          currentWhite = Tungsten100W;
+          break;
+        case Tungsten100W:
+          currentWhite = Candle;
+          break;
+        case Candle:
+          currentWhite = ClearBlueSky;
+          break;
+      }
+    }
+    lastUpdate = millis();
+  }
+  lightColorRGB = currentWhite;
+  lightColorRGB.subtractFromRGB(dimLevel);
+  FastLED.showColor(lightColorRGB);
 }
 
 void loopTetris()
