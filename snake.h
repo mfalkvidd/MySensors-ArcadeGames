@@ -1,3 +1,9 @@
+/*
+   LICENSE: GPLv2
+   Source: https://github.com/hoshi89/MySensors-Snake
+   Author https://github.com/hoshi89
+*/
+
 #ifndef INCLUDED_SNAKE
 #define INCLUDED_SNAKE
 
