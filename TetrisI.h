@@ -1,3 +1,7 @@
+/*
+   Based on https://github.com/AaronLiddiment/LEDSprites/blob/master/examples/Tetris/Tetris.ino
+   Author: https://github.com/AaronLiddiment/
+*/
 const uint8_t TetrisIData[] =
 {
   // Frame 1
