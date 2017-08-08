@@ -1,3 +1,9 @@
+/*
+   Source: https://github.com/mfalkvidd/MySensors-ArcadeGames
+   Author: https://github.com/mfalkvidd
+   See included files for their respective authors
+*/
+
 #define ATTRACT sprintf((char *)AttractMsg, "%sTETRIS%sSCORE %u%sHIGH %u%sANY BUTTON TO START%s", BlankMsg, BlankMsg, LastScore, BlankMsg, HighScore, BlankMsg, BlankMsg);
 // Enable and select radio type attached
 #define MY_RF24_CHANNEL 42
