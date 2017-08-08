@@ -36,7 +36,7 @@ bool button_state[NUM_BUTTONS];
 #include "TetrisI.h"
 #include "ESP8266WiFi.h"
 
-#define BRIGHTNESS 160
+#define BRIGHTNESS 160 // 0-255, higher values draw more power and might be more than USB can provide
 #define MAX_FPS 8 // For Snake
 // Change the next 6 defines to match your matrix type and size
 
@@ -109,7 +109,9 @@ unsigned int HighScore = LoadHighScore(), LastScore;
 enum class Gamemode
 {
   TETRIS,
-  SNAKE
+  SNAKE,
+  MOODLIGHT,
+  FIRE,
 };
 
 Gamemode mode = Gamemode::TETRIS;
@@ -120,10 +122,17 @@ void nextMode() {
       mode = Gamemode::SNAKE;
       break;
     case Gamemode::SNAKE:
+      mode = Gamemode::MOODLIGHT;
+      break;
+    case Gamemode::MOODLIGHT:
+      mode = Gamemode::FIRE;
+      break;
+    case Gamemode::FIRE:
       mode = Gamemode::TETRIS;
       break;
   }
   FastLED.clear();
+  FastLED.show();
 }
 
 // Joystick class to handle input debounce along with variable delays and repeat option
@@ -179,13 +188,15 @@ cJoyStick JSDown(DOWN_PIN, 10, 50, false);
 #include "snake.h"
 snake the_snake(3, vector2d(4, 4), vector2d(MATRIX_WIDTH, MATRIX_HEIGHT));
 
+#include "fire.h"
+
 void setup()
 {
   // Turn off Wifi
   WiFi.mode(WIFI_OFF);
   WiFi.forceSleepBegin();
 
-  FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds[0], leds.Size()); // This is used by Tetris
+  FastLED.addLeds<CHIPSET, LED_PIN, COLOR_ORDER>(leds[0], leds.Size());
   FastLED.setBrightness(BRIGHTNESS);
   FastLED.setCorrection(TypicalSMD5050);
   FastLED.clear(true);
@@ -201,6 +212,7 @@ void setup()
   FastLED.show();
 
   setupTetris();
+  setupFire();
 }
 
 void setupTetris() {
@@ -239,7 +251,50 @@ void loop() {
     case Gamemode::SNAKE :
       loopSnake();
       break;
+    case Gamemode::MOODLIGHT :
+      loopMoodlight();
+      break;
+    case Gamemode::FIRE :
+      loopFire();
+      break;
   }
+}
+
+#define MIN_UPDATE_DELAY 150
+#define HUE_ADJUSTMENT_FACTOR 16
+#define DIM_ADJUSTMENT_FACTOR 20
+void loopMoodlight() {
+  static byte currentHue = HUE_ORANGE;
+  static int dimLevel = 0;
+  static unsigned long lastUpdate = millis();
+  if ((millis() - lastUpdate > MIN_UPDATE_DELAY)) {
+    // Don't check buttons too frequently
+    if (button_state[LEFT_PIN]) {
+      // Decrease hue
+      currentHue = currentHue - HUE_ADJUSTMENT_FACTOR;
+      Serial.print("currentHue: "); Serial.println(currentHue);
+    }
+    if (button_state[UP_PIN]) {
+      // Decrease dimming
+      dimLevel = constrain(dimLevel - DIM_ADJUSTMENT_FACTOR, 0, 255);
+      Serial.print("dimLevel: "); Serial.println(dimLevel);
+    }
+    if (button_state[DOWN_PIN]) {
+      // Increase dimming
+      dimLevel = constrain(dimLevel + DIM_ADJUSTMENT_FACTOR, 0, 255);
+      Serial.print("dimLevel: "); Serial.println(dimLevel);
+    }
+    if (button_state[RIGHT_PIN]) {
+      // Increase hue
+      currentHue = currentHue + HUE_ADJUSTMENT_FACTOR;
+      Serial.print("currentHue: "); Serial.println(currentHue);
+    }
+    lastUpdate = millis();
+  }
+  CRGB moodColorRGB;
+  hsv2rgb_rainbow(CHSV(currentHue, 255, 255), moodColorRGB);
+  moodColorRGB.subtractFromRGB(dimLevel);
+  FastLED.showColor(moodColorRGB);
 }
 
 void loopTetris()
